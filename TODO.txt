@@ -1,0 +1,7 @@
+
+
+* bufor midi
+
+* synchronizacja kilku laptopów, zewnętrzne taktowanie, start, stop
+
+* panorama
