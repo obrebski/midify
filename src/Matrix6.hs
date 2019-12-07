@@ -1,5 +1,6 @@
 module Matrix6 (module Matrix6, module Midify, module Codec.Midi) where
 
+import Euterpea
 import Midify
 import Codec.Midi
 import Data.Word
@@ -28,19 +29,6 @@ instance Transmissible Operation where
 
 instance Transmissible Parameter where
   send = send . ChangeParameter
-
-
-
-
-v x  = send (VCA1Volume x)
-p x  = send (PitchBend' x)
-o    = send AllNotesOff'
-oo   = sequence_ [loc (env[ch:=n] >> o) | n <- [0..5]]
-pc x = send (ProgramChange' x)
-
-
-
-
 
 
 mkSysex :: Byte -> [Byte] -> Bool -> Message

@@ -3,10 +3,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
 
--- moduł Midify
--- wersja 0.6.3 (ZACZYN)
--- autorzy: T. Obrębski, ..., ..., ...
-
 module Midify (module Midify, module PMWritable)
 where
 
@@ -15,29 +11,25 @@ import Euterpea hiding (Message(..),first,second)
 import Codec.Midi
 import GHC.Exts (sortWith)
 import Control.Monad.Trans.RWS
--- import Algebra.Lattice
 import Control.Lens
 import Data.Bits
 import Data.List
 
 type BPM      = Rational
-type RealTime = Float
 
 data Env = Env {
-                 _time::RealTime,
-                 _ch::Channel,     -- kanał MIDI
-                 _bpm::BPM,        -- tempo wyrażone w "beats per minute"
-                 _vel::Velocity,   -- domyślna prędkość naduszenia klawisza
-                 _vel'::Velocity,  -- domyślna pręskość puszczenia klawisza
-                 _tra::Int,        -- transpozycja
-                 _prog::Int,       -- program
-                 _dt::RealTime,    -- minimalna przerwa między komunikatami kanałowymi
-                 _sdt::RealTime    -- minimalna przerwa między komunikatami sysex
+                 _time::RealTime,  -- time in seconds
+                 _ch::Channel,     -- MIDI channel
+                 _bpm::BPM,        -- beats per minute
+                 _vel::Velocity,   -- default press velocity
+                 _vel'::Velocity,  -- default release velocity
+                 _tra::Int,        -- transposition
+                 _prog::Int        -- program
                } deriving Show
 
 makeLenses ''Env
 
-env0 = Env {_time=0, _ch=0, _bpm=60, _vel=64, _vel'=64, _tra=0, _prog=0, _dt=0.05, _sdt=0.05}
+env0 = Env {_time=0, _ch=0, _bpm=60, _vel=64, _vel'=64, _tra=0, _prog=0}
 
 toPCClock :: Track RealTime -> Track PCClock
 toPCClock = map $ over _1 (round . (* 1000))
@@ -49,6 +41,9 @@ type T = RWS Bool (Track RealTime) Env
 
 instance PMWritable (T ()) where
   write s = write s . midify
+
+instance Show (T ()) where
+  show _ = "()"
   
 midifyIn :: Env -> T () -> (Env,Track RealTime)
 midifyIn env c = execRWS c True env
@@ -115,7 +110,7 @@ instance Transmissible (Music Pitch) where
                                    see vel >>= send . NoteOn' (absPitch pitch + tr) >>
                                    pause (dur * 4) >>
                                    see vel' >>= send . NoteOff' (absPitch pitch + tr)
-  send (Prim (Rest dur))         = pause dur
+  send (Prim (Rest dur))         = pause (dur * 4)
   send (m1 :+: m2)               = send m1 >> send m2
   send (m1 :=: m2)               = gettime >>= \t -> send m1 >> gettime >>= \t'  ->
                                    settime t      >> send m2 >> gettime >>= \t'' ->
@@ -181,11 +176,14 @@ class Assignable a where
   assignChannel :: a -> (Channel -> Message)
 
 instance Assignable ChannelMessage where
-  assignChannel (NoteOn' x y)            = \ch -> NoteOn        (ch.&.u4)   (x.&.u7)    (y.&.u7)
-  assignChannel (NoteOff' x y)           = \ch -> NoteOff       (ch.&.u4)   (x.&.u7)    (y.&.u7)
-  assignChannel (ProgramChange' x)       = \ch -> ProgramChange (ch.&.u4)   (x.&.u7)
-  assignChannel (PitchBend' x)           = \ch -> PitchWheel    (ch.&.u4)   (shift ((x + 0x3F).&.u7) 8)
-  assignChannel (PitchBend2' x)          = \ch -> PitchWheel    (ch.&.u4)   ((x+0x1FFF).&.u14)
+  assignChannel (NoteOn' x y)            = \ch -> NoteOn          (ch.&.u4)   (x.&.u7)    (y.&.u7)
+  assignChannel (NoteOff' x y)           = \ch -> NoteOff         (ch.&.u4)   (x.&.u7)    (y.&.u7)
+  assignChannel (KeyPressure' x y)       = \ch -> KeyPressure     (ch.&.u4)   (x.&.u7)    (y.&.u7)
+  assignChannel (ProgramChange' x)       = \ch -> ProgramChange   (ch.&.u4)   (x.&.u7)
+  assignChannel (ChannelPressure' x)     = \ch -> ChannelPressure (ch.&.u4)   (x.&.u7)
+  assignChannel (PitchBend' x)           = \ch -> PitchWheel      (ch.&.u4)   (shift ((x + 0x3F).&.u7) 8)
+  assignChannel (PitchBend2' x)          = \ch -> PitchWheel      (ch.&.u4)   ((x+0x1FFF).&.u14)
+  
   assignChannel (BankSelect' x)          = \ch -> ControlChange (ch.&.u4)   0           (x.&.u7)
   assignChannel (Modulation' x)          = \ch -> ControlChange (ch.&.u4)   1           (x.&.u7)
   assignChannel (BreathController' x)    = \ch -> ControlChange (ch.&.u4)   2           (x.&.u7)
@@ -221,6 +219,11 @@ instance Assignable ChannelMessage where
 
 -- NOTATKI
 
+b x  = send (PitchBend' x)
+o    = send AllNotesOff'
+oo   = sequence_ [loc (env[ch:=n] >> o) | n <- [0..15]]
+pc x = send (ProgramChange' x)
+
 -- -- komunikaty Control Change
 -- ccBankSelect          = flip ControlChange   0
 -- ccModulation          = flip ControlChange   1 
@@ -254,142 +257,4 @@ instance Assignable ChannelMessage where
 -- ccPolyMode            = flip ControlChange 127
 
 
-
--- w monadzie Reader
--- sc :: (Fractional a, Ord a) => (Schedule a) -> Reader (a,a) (Track a)
--- sc (Msg m)      = ask >>= \(_,time) -> return [(time,m)]           
--- sc (Tempo f s)  = local (first f)      (sc s)
--- sc (After t s)  = local (second (+ t)) (sc s)
--- -- sc (s1 :=: s2)  = (++) <$> sc s1 <*> sc s2 >>= return . sortTrack
--- sc (Every t ss) = sequence (sc . After t <$> ss) >>= return . concat
--- -- sc (Pause t)    = modify (first (+ t)) >> return []
-
-
-
-
--- sendEvent' :: PMStream -> Event' -> IO PMError
-
--- midiEvent' :: MidiMessage -> 
-
--- import Euterpea
--- import Sound.PortMidi (openOutput,
---                        close,
---                        writeEvents,
---                        writeSysEx,
---                        time,
---                        encodeMsg,
---                        PMStream,
---                        PMError,
---                        PMEvent(PMEvent),
---                        PMMsg(PMMsg),
---                        initialize,
---                        terminate)
-
--- import Foreign.C (CLong (CLong),CULong (CULong))
--- import Data.Maybe (Maybe (Just,Nothing), maybeToList)
--- import Data.Word (Word8)
-
--- type Byte = Word8
--- type Channel = Byte
--- type Time    = CULong
--- type Sysex   = [Byte]
-
-
--- -- zaplanuj wydarzenia na teraz
-
--- scheduleNow :: [Message] -> [(Time,Message)]
--- scheduleNow = map (0,) 
-
--- -- rozplanuj wydarzenia równomiernie w ciągu czasu `time' (w sekundach)
-
--- scheduleWithin :: (RealFrac a) => a -> [Message] -> [(Time,Message)]
--- scheduleWithin time msgs = let n = fromIntegral $ length msgs
---                                interval = round $ (time * 1000) / (n - 1)
---                            in zip [0,interval..] msgs
-
--- -- rozplanuj wydarzenia co time sekund
-
--- scheduleEvery :: (RealFrac a) => a -> [Message] -> [(Time,Message)]
--- scheduleEvery time msgs = zip [0,round (time * 1000)..] msgs
-
-  -- -- wyślij wydarzenia do wyjścia `stream'
-
--- sendEvents :: PMStream -> [(Time,Message)] -> IO PMError
--- sendEvents stream events = do now <- time
---                               writeEvents stream $ mkEvents now events
-
--- -- wyślij komunikat sysex po dalay sekundach
-
--- sendSysEx' :: PMStream -> Time -> Sysex -> IO PMError
--- sendSysEx' stream delay sysex = do now <- time
---                                    writeSysEx stream (now + delay) $ map (toEnum . fromEnum) sysex
-
--- sendSysEx :: (RealFrac a) => PMStream -> a -> Sysex -> IO PMError
--- sendSysEx stream delay sysex = do now <- time
---                                   let delay' = round $ delay * 1000
---                                   writeSysEx stream (now + delay') $ map (toEnum . fromEnum) sysex
-
--- -----------------------------------------------------------------------------------------------------
-
--- relToAbsTime :: [(Time,Message)] -> [(Time,Message)]
-
-
--- encodeMessage :: Message -> Maybe CLong
--- encodeMessage = fmap encodeMsg . midiEvent
-
-
--- mkEvent :: Time -> (Time,Message) -> Maybe PMEvent
--- mkEvent base (delay,msg) = encodeMessage msg >>= \e -> Just (PMEvent e (base+delay))
-
--- mkEvents :: Time -> [(Time,Message)] -> [PMEvent]
--- mkEvents base = concatMap (maybeToList . mkEvent base)
-
-
-
--- -- zapożyczone (skąd ???, z Euterpei ?)
-
-
-
--- byte :: Integer -> Byte
--- byte 0 = 0
--- byte n = fromInteger (n `mod` 2) + 2 * byte (n `div` 10)
-
-
-
--- -- ARCHIWUM
-
--- -- doSendMessagesDev :: Int -> [Message] -> IO ()
--- -- doSendMessagesDev dev msgs =  do
--- --   stream <- openOutput dev 10
--- --   case stream of
--- --     Right err   -> putStrLn ("After open: " ++ show err)
--- --     Left stream -> sendMessagesNow stream msgs >>= print >> close stream >>= print
-
--- -- sendMessagesNow :: PMStream -> [Message] -> IO PMError
--- -- sendMessagesNow stream = writeEvents stream . map (($ 0) . PMEvent ) . encodeMessages
-
-
-
-
--- -- sendEventsDev :: Int -> [(Time,Message)] -> IO ()
--- -- sendEventsDev device events = do stream <- openOutput device 10
--- --                                  case stream of
--- --                                    Right err   -> putStrLn ("After open: " ++ show err)
--- --                                    Left stream -> sendEvents stream events >>= print
-
--- -- main = do
--- --    let deviceId = 12
--- --    initialize >>= print
--- --    getDeviceInfo deviceId >>= print
--- --    startTime <- time
--- --    let evts = [PMEvent (encodeMsg $ fromJust $ midiEvent (ControlChange 2 3 4)) 0]
--- --    result <- openOutput deviceId 10
--- --    case result of
--- --      Right err   -> putStrLn ("After open: " ++ show err)
--- --      Left stream ->
--- --          do result <- writeEvents stream evts
--- --             putStrLn ("After write: " ++ show result)
--- --             close stream
--- --             return ()
--- --    terminate >>= print
 
