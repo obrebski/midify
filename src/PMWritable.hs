@@ -27,6 +27,13 @@ type BPMTime   = Float
 type RealTime  = Float
 type ClockTime = PCClock
 
+class MidiTime a where
+  toClockTime :: a -> ClockTime
+
+instance MidiTime Float where
+  toClockTime = const 0
+
+
 class PMWritable a where
   write :: PMStream -> a -> IO PMError
 

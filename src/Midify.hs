@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE LiberalTypeSynonyms #-}
 
 module Midify (module Midify, module PMWritable)
 where
@@ -29,7 +30,9 @@ data Env = Env {
 
 makeLenses ''Env
 
-env0 = Env {_time=0, _ch=0, _bpm=60, _vel=64, _vel'=64, _tra=0, _prog=0}
+defaultEnv :: Env
+defaultEnv = Env {_time=0, _ch=0, _bpm=60, _vel=64, _vel'=64, _tra=0, _prog=0}
+
 
 toPCClock :: Track RealTime -> Track PCClock
 toPCClock = map $ over _1 (round . (* 1000))
@@ -37,57 +40,59 @@ toPCClock = map $ over _1 (round . (* 1000))
 instance PMWritable (Track RealTime) where
   write s = write s . toPCClock
 
-type T = RWS Bool (Track RealTime) Env
 
-instance PMWritable (T ()) where
+type T t = RWS Bool (Track t) Env
+
+
+instance PMWritable (T RealTime ()) where
   write s = write s . midify
 
-instance Show (T ()) where
+instance Show (T RealTime ()) where
   show _ = "()"
   
-midifyIn :: Env -> T () -> (Env,Track RealTime)
+midifyIn :: Env -> T RealTime () -> (Env,Track RealTime)
 midifyIn env c = execRWS c True env
 
-midify :: T () -> Track RealTime
-midify = snd . midifyIn env0
+midify :: T RealTime () -> Track RealTime
+midify = snd . midifyIn defaultEnv
 
-see :: Getting a Env a -> T a
+see :: Getting a Env a -> T RealTime a
 see f = view f <$> get
 
 data Update f a = f := a | f :~ (a->a)
 
-env :: Num a => [Update (ASetter Env Env a a) a] -> T ()
+env :: Num a => [Update (ASetter Env Env a a) a] -> T RealTime ()
 env = sequence_ . map (modify . toLens)
   where
     toLens (f := v) = (set f v)
     toLens (f :~ g) = (over f g)
 
-gettime :: T RealTime
+gettime :: T RealTime RealTime
 gettime = view time <$> get
 
-settime :: RealTime -> T ()
+settime :: RealTime -> T RealTime ()
 settime = modify . set time
 
-loc :: T () -> T ()
+loc :: T RealTime () -> T RealTime ()
 loc m = get >>= \e -> m >> see time >>= \t -> put (set time t e)
 
-fork :: T () -> T ()
+fork :: T RealTime () -> T RealTime ()
 fork m = get >>= \e -> m >> put e
 
-pause :: Rational -> T ()
+pause :: Rational -> T RealTime ()
 pause t = see bpm >>= \b -> modify $ over time (+ fromRational (t * 60 / b))
 
-every :: Rational -> [T ()] -> T ()
+every :: Rational -> [T RealTime ()] -> T RealTime ()
 every t = sequence_ . intersperse (pause t)
 
-within :: Rational -> [T ()] -> T ()
+within :: Rational -> [T RealTime ()] -> T RealTime ()
 within t xs = every t' xs where t' = (t / fromIntegral (length xs - 1))
 
-rep :: Int -> T () -> T ()
+rep :: Int -> T RealTime () -> T RealTime ()
 rep n = sequence_ . replicate n
 
 class Transmissible a where
-  send :: a -> T ()
+  send :: a -> T RealTime ()
 
 instance Transmissible a => Transmissible [a] where
   send = sequence_ . map send

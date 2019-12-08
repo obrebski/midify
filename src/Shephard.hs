@@ -37,7 +37,7 @@ tone src dst t = do
                pause (t - 0.2)
                send (NoteOff' dst 1)
 
-tones :: AbsPitch -> AbsPitch -> Dur -> Dur -> Int -> T ()
+tones :: AbsPitch -> AbsPitch -> Dur -> Dur -> Int -> T RealTime ()
 tones src dst t d n = sequence_ [ fork ( pause del >> env[ch:=c] >> tone src dst (t-10) ) | i <- [0..(n-1)],
                                                                                             let del = fromIntegral i * d,
                                                                                             let c = (i `mod` 6) + 1 ]
