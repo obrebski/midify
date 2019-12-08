@@ -1,4 +1,4 @@
-
+* Midify: całe midi w BPMTime, aż do write
 
 * bufor midi
 
