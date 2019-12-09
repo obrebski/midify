@@ -2,7 +2,7 @@ module JX8P (module JX8P, module Midify, module Codec.Midi) where
 
 import Euterpea
 import Midify
-import Codec.Midi
+import Codec.Midi (Message(..))
 import Data.Word
 import Data.ByteString.Lazy (pack)
 

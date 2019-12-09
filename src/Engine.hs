@@ -1,10 +1,21 @@
-module Engine where
+{-# LANGUAGE TemplateHaskell #-}
 
-import Codec.Midi (Message,Track)
-import Control.Concurrent
-import Control.Monad
-import Control.Monad.Reader
-import PMWritable
+module Engine ( module Engine
+              , module Control.Lens
+              , module Control.Concurrent
+              , module Midify
+              )
+
+where
+
+import Sound.PortMidi       (PMStream)
+import Codec.Midi           (Message, Track)
+import Control.Concurrent   (MVar, ThreadId, newMVar, newEmptyMVar, readMVar, takeMVar, putMVar, withMVar, swapMVar, forkIO, forkOS)
+import Control.Monad        (forever, unless)
+import Control.Monad.Reader (ReaderT, runReaderT, ask)
+import Control.Monad.IO.Class     (MonadIO, liftIO)
+import Control.Lens
+import Midify hiding (env)
 
 data Status = Stop
             | Run
@@ -13,10 +24,7 @@ data Status = Stop
 data Order  = Forward
             | Backward
             | Shuffle
-            | Transform (Track BPMTime -> Track BPMTime)
-
-
--- data Arp = No | Up Int | Down Int | Random | 
+            | Transform (Track BeatTime -> Track BeatTime)
 
 
 -- TrackMessage = Stop | Kill | Rewind
@@ -24,25 +32,42 @@ data Order  = Forward
 -- killTrack - natychmiast
 -- modify
 
-data Ctrl = Ctrl { status :: Status
-                 , dir :: Order
-                 , loop :: Bool
-                 , count :: Int
-                 , bpm :: Integer
-                 , end :: (Ctrl -> IO Bool)
-                 }
+data Player a = Player { _status :: Status
+                       , _loop :: Bool
+                       , _count :: Int
+                       , _stream :: PMStream
+                       , _track :: MVar a
+                       , _lenv :: MVar Env
+                       }
+            -- deriving Show
 
-defCtrl :: Ctrl
-defCtrl = Ctrl  { status = Stop
-                , dir    = Forward
-                , loop   = False
-                , count  = 1
-                , bpm    = 60
-                , end    = const (return False)
-                }
+makeLenses ''Player
+
+mkPlayer :: PMWritable a => PMStream -> IO (Player a)
+mkPlayer s = Player Stop False 1 s <$> newEmptyMVar <*> newMVar defaultEnv
+
+type Engine a = ReaderT (Player a) IO ()
+
+-- run :: PMWritable a => Player a -> IO ThreadId
+run :: Player (T RealTime ()) -> IO ThreadId
+run = forkIO . engine
+
+-- engine :: PMWritable a => Player a -> IO ()
+engine :: Player (T RealTime ()) -> IO ()
+engine p = forever $ do
+  t <- takeMVar $ p^.track
+  e <- readMVar $ p^.lenv
+  putStrLn $ show $ p^.status
+  write (p^.stream) $ snd $ midifyIn e t
 
 
-type Engine a = ReaderT (MVar Ctrl, MVar (Track BPMTime)) IO a
+-- -- run :: MVar Player -> IO ThreadId
+-- -- run p = runReader $ forever $ do
+--   -- ctrl <- newMVar
+-- --  unless (null (track ctrl)) $ liftM $ write (stream ctrl) (track ctrl)
+
+
+
 
 -- newEngine :: IO (ThreadId, MVar Ctrl, MVar (Track BPMTime))
 -- newEngine = do ctrl <- newMVar

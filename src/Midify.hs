@@ -16,7 +16,26 @@ import Control.Lens
 import Data.Bits
 import Data.List
 
-type BPM      = Rational
+type BPM         = Rational
+type BeatTime    = Rational
+type RealTime    = Float
+
+type PCClockTime = PCClock
+
+class MidiTime a where
+  toPCClockTime :: BPM -> a -> PCClockTime
+
+instance MidiTime RealTime where
+  toPCClockTime = const . round . (* 1000)
+
+instance MidiTime BeatTime where
+  toPCClockTime bpm = round . fromRational . (* (60000/bpm))
+
+instance MidiTime PCClockTime where
+  toPCClockTime = const id
+
+-- instance MidiTime t => MidiTime (Track t) where
+--   toPCClockTime bpm = map $ over _1 (toPCClockTime bpm)
 
 data Env = Env {
                  _time::RealTime,  -- time in seconds
@@ -40,9 +59,7 @@ toPCClock = map $ over _1 (round . (* 1000))
 instance PMWritable (Track RealTime) where
   write s = write s . toPCClock
 
-
 type T t = RWS Bool (Track t) Env
-
 
 instance PMWritable (T RealTime ()) where
   write s = write s . midify
@@ -224,10 +241,10 @@ instance Assignable ChannelMessage where
 
 -- NOTATKI
 
-b x  = send (PitchBend' x)
-o    = send AllNotesOff'
-oo   = sequence_ [loc (env[ch:=n] >> o) | n <- [0..15]]
-pc x = send (ProgramChange' x)
+-- b x  = send (PitchBend' x)
+-- o    = send AllNotesOff'
+-- oo   = sequence_ [loc (env[ch:=n] >> o) | n <- [0..15]]
+-- pc x = send (ProgramChange' x)
 
 -- -- komunikaty Control Change
 -- ccBankSelect          = flip ControlChange   0

@@ -4,48 +4,46 @@
 module PMWritable (initialize,terminate, module PMWritable)
 where
 
-import Codec.Midi
-import Sound.PortMidi (
-                        PMEvent(PMEvent), PMMsg(PMMsg),
-                        PMStream,
-                        PMError(..),
-                        DeviceID,
-                        initialize, terminate,
-                        openInput, openOutput, close,
-                        writeEvents, writeShort, writeSysEx,
-                        time,
-                        encodeMsg
+import Codec.Midi     ( Message(..)
+                      , Track
+                      , isChannelMessage
                       )
-import Foreign.C (CLong (CLong),CULong (CULong))
-import Data.Bits ((.|.),(.&.),shiftR)
-import Data.ByteString.Lazy (unpack)
-import Data.Word (Word32)
+import Sound.PortMidi ( PMEvent(PMEvent)
+                      , PMMsg(PMMsg)
+                      , PMStream
+                      , PMError(..)
+                      , DeviceID
+                      , initialize, terminate
+                      , openInput, openOutput, close
+                      , writeEvents, writeShort, writeSysEx
+                      , time
+                      , encodeMsg
+                      )
+import Foreign.C      ( CULong (CULong)
+                      )
+import Data.Bits      ( (.|.)
+                      , (.&.)
+                      , shiftR
+                      )
+import Data.Word      ( Word32
+                      )
+import Data.ByteString.Lazy ( unpack )
 
 type PCClock  = Word32
-
-type BPMTime   = Float
-type RealTime  = Float
-type ClockTime = PCClock
-
-class MidiTime a where
-  toClockTime :: a -> ClockTime
-
-instance MidiTime Float where
-  toClockTime = const 0
-
 
 class PMWritable a where
   write :: PMStream -> a -> IO PMError
 
-instance PMWritable (ClockTime, Message) where
-  write str (t,msg) | isChannelMessage msg = time >>= \now -> writeShort str $ PMEvent (encodeMsg $ toPMMsg msg) (now + (CULong t))
+instance PMWritable (PCClock, Message) where
+  write str (t,msg) | isChannelMessage msg = time >>= \now ->
+                                                    writeShort str $ PMEvent (encodeMsg $ toPMMsg msg) (now + (CULong t))
   write str (t,Sysex n bytes)              = time >>= \now -> writeSysEx str (now + (CULong t)) $ map (toEnum . fromEnum) $ unpack bytes
   write _   _                              = return BadData
 
 instance PMWritable Message where
-  write str msg = write str (0::ClockTime,msg)
+  write str msg = write str (0::PCClock,msg)
 
-instance PMWritable (Track ClockTime) where
+instance PMWritable (Track PCClock) where
   write _ [] = return NoError
   write str (event:track) = write str event >>= \case
                                                    NoError -> write str track
@@ -65,5 +63,5 @@ openMidiOutput :: DeviceID -> IO PMStream
 openMidiOutput dev = initialize >> openOutput dev 10 >>= \case
                                                             Left stream -> return stream
                                                             Right err   -> error (show err)
-
+start :: Int -> IO PMStream
 start n = initialize >> openMidiOutput n
