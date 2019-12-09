@@ -58,7 +58,7 @@ engine p = forever $ do
   t <- takeMVar $ p^.track
   e <- readMVar $ p^.lenv
   putStrLn $ show $ p^.status
-  write (p^.stream) $ snd $ midifyIn e t
+  write (p^.stream) $ snd $ midifyIn (0,e) t
 
 
 -- -- run :: MVar Player -> IO ThreadId

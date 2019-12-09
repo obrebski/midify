@@ -22,12 +22,12 @@ minus63ToPlus63 x    = x >= (-63) && x <= 63
 
 type PatchNumber     = Int -- 0-99
 
-instance Transmissible Operation where
+instance Midifiable Operation where
   send (SinglePatchRequest p)      = send $ mkSysex 0x00 [fromIntegral p] False
   send EnterRemoteEditMode         = send $ mkSysex 0x05 [] False
   send (ChangeParameter p)         = send $ mkSysex 0x06 (toBytes p) False
 
-instance Transmissible Parameter where
+instance Midifiable Parameter where
   send = send . ChangeParameter
 
 

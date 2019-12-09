@@ -8,10 +8,10 @@ import Data.ByteString.Lazy (pack)
 
 type Byte = Word8
 
-instance Transmissible Operation where
+instance Midifiable Operation where
   send (IndividualParameter p)         = send $ mkSysex 0 0x36 (toBytes p)
 
-instance Transmissible Parameter where
+instance Midifiable Parameter where
   send = send . IndividualParameter
 
 

@@ -37,9 +37,7 @@ instance MidiTime PCClockTime where
 -- instance MidiTime t => MidiTime (Track t) where
 --   toPCClockTime bpm = map $ over _1 (toPCClockTime bpm)
 
-data Env = Env {
-                 _time::RealTime,  -- time in seconds
-                 _ch::Channel,     -- MIDI channel
+data Env = Env { _ch::Channel,     -- MIDI channel
                  _bpm::BPM,        -- beats per minute
                  _vel::Velocity,   -- default press velocity
                  _vel'::Velocity,  -- default release velocity
@@ -50,7 +48,7 @@ data Env = Env {
 makeLenses ''Env
 
 defaultEnv :: Env
-defaultEnv = Env {_time=0, _ch=0, _bpm=60, _vel=64, _vel'=64, _tra=0, _prog=0}
+defaultEnv = Env { _ch=0, _bpm=60, _vel=64, _vel'=64, _tra=0, _prog=0}
 
 
 toPCClock :: Track RealTime -> Track PCClock
@@ -59,7 +57,7 @@ toPCClock = map $ over _1 (round . (* 1000))
 instance PMWritable (Track RealTime) where
   write s = write s . toPCClock
 
-type T t = RWS Bool (Track t) Env
+type T t = RWS Bool (Track t) (t,Env)
 
 instance PMWritable (T RealTime ()) where
   write s = write s . midify
@@ -67,37 +65,37 @@ instance PMWritable (T RealTime ()) where
 instance Show (T RealTime ()) where
   show _ = "()"
   
-midifyIn :: Env -> T RealTime () -> (Env,Track RealTime)
-midifyIn env c = execRWS c True env
+midifyIn :: (RealTime,Env) -> T RealTime () -> ((RealTime,Env),Track RealTime)
+midifyIn (t,env) c = execRWS c True (t,env)
 
 midify :: T RealTime () -> Track RealTime
-midify = snd . midifyIn defaultEnv
+midify = snd . midifyIn (0,defaultEnv)
 
 see :: Getting a Env a -> T RealTime a
-see f = view f <$> get
+see f = view (_2.f) <$> get
 
 data Update f a = f := a | f :~ (a->a)
 
 env :: Num a => [Update (ASetter Env Env a a) a] -> T RealTime ()
 env = sequence_ . map (modify . toLens)
   where
-    toLens (f := v) = (set f v)
-    toLens (f :~ g) = (over f g)
+    toLens (f := v) = (set (_2.f) v)
+    toLens (f :~ g) = (over (_2.f) g)
 
 gettime :: T RealTime RealTime
-gettime = view time <$> get
+gettime = view _1 <$> get
 
 settime :: RealTime -> T RealTime ()
-settime = modify . set time
+settime = modify . set _1
 
 loc :: T RealTime () -> T RealTime ()
-loc m = get >>= \e -> m >> see time >>= \t -> put (set time t e)
+loc m = get >>= \(_,e) -> m >> gettime >>= \t -> put (t,e)
 
 fork :: T RealTime () -> T RealTime ()
-fork m = get >>= \e -> m >> put e
+fork m = get >>= \(t,e) -> m >> put (t,e)
 
 pause :: Rational -> T RealTime ()
-pause t = see bpm >>= \b -> modify $ over time (+ fromRational (t * 60 / b))
+pause t = see bpm >>= \b -> modify $ over _1 (+ fromRational (t * 60 / b))
 
 every :: Rational -> [T RealTime ()] -> T RealTime ()
 every t = sequence_ . intersperse (pause t)
@@ -108,26 +106,26 @@ within t xs = every t' xs where t' = (t / fromIntegral (length xs - 1))
 rep :: Int -> T RealTime () -> T RealTime ()
 rep n = sequence_ . replicate n
 
-class Transmissible a where
+class Midifiable a where
   send :: a -> T RealTime ()
 
-instance Transmissible a => Transmissible [a] where
+instance Midifiable a => Midifiable [a] where
   send = sequence_ . map send
 
-instance Transmissible (Env -> Env) where
-  send = modify
+instance Midifiable (Env -> Env) where
+  send = modify . over _2
 
-instance Transmissible Message where
+instance Midifiable Message where
   send x = gettime >>= \t -> see tra >>= \tr -> tell [(t,transposeIfNote tr x)]
     where
       transposeIfNote tr (NoteOn  c p v) = NoteOn  c (p+tr) v
       transposeIfNote tr (NoteOff c p v) = NoteOff c (p+tr) v
       transposeIfNote _  other           = other
 
-instance Transmissible ChannelMessage where
+instance Midifiable ChannelMessage where
   send x = see ch >>= send . assignChannel x
 
-instance Transmissible (Music Pitch) where
+instance Midifiable (Music Pitch) where
   send (Prim (Note dur pitch))   = see tra >>= \tr ->
                                    see vel >>= send . NoteOn' (absPitch pitch + tr) >>
                                    pause (dur * 4) >>
@@ -137,14 +135,12 @@ instance Transmissible (Music Pitch) where
   send (m1 :=: m2)               = gettime >>= \t -> send m1 >> gettime >>= \t'  ->
                                    settime t      >> send m2 >> gettime >>= \t'' ->
                                    settime (max t' t'')
-
-
   send (Modify (Tempo x) m)      = loc $ env[bpm:~(* x)] >> send m
   send (Modify (Transpose x) m)  = loc $ env[tra:=x] >> send m
   send (Modify (Instrument x) m) = let p = fromEnum x in loc $ send (ProgramChange' p) >> env[prog:=p] >> send m
   
-sortTrack :: (Num a, Ord a) => Track a -> Track a
-sortTrack = sortWith fst
+-- sortTrack :: (Num a, Ord a) => Track a -> Track a
+-- sortTrack = sortWith fst
 
 
 data ChannelMessage = NoteOn' Int Int
