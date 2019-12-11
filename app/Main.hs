@@ -1,6 +1,6 @@
 module Main where
 
-import Midify
+import Sound.MIDI.Midify
 
 main :: IO ()
 main = putStrLn "Midify"

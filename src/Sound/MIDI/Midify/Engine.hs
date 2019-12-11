@@ -1,12 +1,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Engine ( module Engine
-              , module Control.Lens
-              , module Control.Concurrent
-              , module Midify
-              )
-
-where
+module Sound.MIDI.Midify.Engine ( module Sound.MIDI.Midify.Engine
+                                , module Control.Lens
+                                , module Control.Concurrent
+                                , module Sound.MIDI.Midify
+                                ) where
 
 import Sound.PortMidi       (PMStream)
 import Codec.Midi           (Message, Track)
@@ -15,7 +13,7 @@ import Control.Monad        (forever, unless)
 import Control.Monad.Reader (ReaderT, runReaderT, ask)
 import Control.Monad.IO.Class     (MonadIO, liftIO)
 import Control.Lens
-import Midify hiding (env)
+import Sound.MIDI.Midify hiding (env)
 
 data Status = Stop
             | Run
@@ -58,7 +56,7 @@ engine p = forever $ do
   t <- takeMVar $ p^.track
   e <- readMVar $ p^.lenv
   putStrLn $ show $ p^.status
-  write (p^.stream) $ snd $ midifyIn (0,e) t
+  midifyIn (0,e) t >>= write (p^.stream) . snd  
 
 
 -- -- run :: MVar Player -> IO ThreadId

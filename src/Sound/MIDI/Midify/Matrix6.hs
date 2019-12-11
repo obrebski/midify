@@ -1,7 +1,10 @@
-module Matrix6 (module Matrix6, module Midify, module Codec.Midi) where
+module Sound.MIDI.Midify.Matrix6 ( module Sound.MIDI.Midify.Matrix6
+                                 , module Sound.MIDI.Midify
+                                 , module Codec.Midi
+                                 ) where
 
-import Euterpea
-import Midify
+import Euterpea -- ????????
+import Sound.MIDI.Midify
 import Codec.Midi (Message(..))
 import Data.Word
 import Data.ByteString.Lazy (pack)

@@ -1,7 +1,7 @@
 module Shephard (m6Setup,up,down,tone,tones) where
 
 import Euterpea (AbsPitch,Dur)
-import Matrix6
+import Sound.MIDI.Midify.Matrix6
 
 pa = pause 0.1
 

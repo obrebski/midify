@@ -1,7 +1,10 @@
-module JX8P (module JX8P, module Midify, module Codec.Midi) where
+module Sound.MIDI.Midify.JX8P ( module Sound.MIDI.Midify.JX8P
+                              , module Sound.MIDI.Midify
+                              , module Codec.Midi
+                              ) where
 
 import Euterpea
-import Midify
+import Sound.MIDI.Midify
 import Codec.Midi (Message(..))
 import Data.Word
 import Data.ByteString.Lazy (pack)
