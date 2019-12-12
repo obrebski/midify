@@ -3,6 +3,7 @@
 
 module Sound.MIDI.Midify.PMWritable ( initialize
                                     , terminate
+                                    , PMError
                                     , module Sound.MIDI.Midify.PMWritable
                                     ) where
 
@@ -18,6 +19,13 @@ import Foreign.C      ( CULong )
 import Data.Bits      ( (.|.), (.&.), shiftR )
 
 import Data.ByteString.Lazy ( unpack )
+
+
+writeMsg :: PMStream -> (Timestamp,Message) -> IO PMError
+writeMsg str (t,msg) | isChannelMessage msg = writeShort str $ PMEvent (encodeMsg $ toPMMsg msg) t
+writeMsg str (t,Sysex n bytes)              = writeSysEx str t $ map (toEnum . fromEnum) $ unpack bytes
+writeMsg _   _                              = return BadData
+
 
 type Timestamp  = CULong
 
