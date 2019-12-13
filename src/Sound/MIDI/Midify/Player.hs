@@ -11,14 +11,12 @@ import Control.Monad.Trans.RWS      (RWST, runRWST, get, put, modify, ask)
 import Control.Concurrent           -- (ThreadId, MVar, readMVar, Chan, readChan, forkIO, threadDelay)
 import Control.Monad.IO.Class       (liftIO)
 import Sound.MIDI.Midify.PMWritable -- (Timestamp)
+import Sound.MIDI.Midify.Types
 
-type Event      = (Double,Message)
-type RealTime   = Timestamp
-type TrackTime  = Double
-type MidiWriter = (Timestamp, Message) -> IO PMError
+type MidiWriter = (PCTime, Message) -> IO PMError
 
-data Ctrl = Ctrl { tempo :: Double
-                 , delta :: Timestamp
+data Ctrl = Ctrl { tempo :: TrackTime -- ^ the length of quarter note in miliseconds
+                 , delta :: PCTime    -- ^
                  } deriving Show
 
 data PEnv = PEnv { input   :: Chan Event  -- ^ the channel MIDI events are read from
@@ -26,7 +24,7 @@ data PEnv = PEnv { input   :: Chan Event  -- ^ the channel MIDI events are read 
                  , control :: MVar Ctrl   -- ^ shared control data
                  }
            
-type Player = RWST PEnv [String] (RealTime,TrackTime) IO
+type Player = RWST PEnv [String] (PCTime,TrackTime) IO
 
 runPlayer :: PEnv -> IO ThreadId
 runPlayer = forkIO . runPlayer'
@@ -38,14 +36,14 @@ runPlayer = forkIO . runPlayer'
 ctrl :: (Ctrl -> a) -> Player a
 ctrl f = control <$> ask >>= liftIO . readMVar >>= return . f
 
-playTime :: Double -> Player Timestamp
+playTime :: TrackTime -> Player PCTime
 playTime t = do (rt,tt) <- get
                 -- if (t==0)
                 --   then reset >> 
                 to <- ctrl tempo
                 return $ rt + round (to*(t-tt))
 
-spendTime :: Timestamp -> Player ()
+spendTime :: PCTime -> Player ()
 spendTime t = do d <- ctrl delta
                  when (t>d) $ liftIO $ threadDelay $ 1000 * fromIntegral (t-d `div` 2)
 

@@ -4,7 +4,6 @@
 module Sound.MIDI.MM where
 
 import Sound.PortMidi (PMStream,time)
-import Sound.MIDI.Midify (BPM,Timestamp)
 import Codec.Midi
 import Control.Lens
 import Control.Monad      (when,forever)
@@ -15,11 +14,10 @@ import Control.Concurrent   ( MVar, modifyMVar_, readMVar
                             ) -- ThreadId, newMVar, newEmptyMVar, takeMVar, putMVar, withMVar, swapMVar, forkIO, forkOS)
 import Control.Monad.IO.Class     (MonadIO, liftIO)
 import Euterpea hiding (play,input,output,tempo,forever)
-import Sound.MIDI.Midify.PMWritable
+import Sound.MIDI.Midify.PMWritable (Timestamp)
 
 
 data Env = Env { _ch::Channel     -- MIDI channel
-               , _bpm::BPM        -- beats per minute
                , _vel::Velocity   -- default press velocity
                , _vel'::Velocity  -- default release velocity
                } deriving Show
@@ -27,7 +25,7 @@ data Env = Env { _ch::Channel     -- MIDI channel
 makeLenses ''Env
 
 defaultEnv :: Env
-defaultEnv =  Env 0 60 64 64
+defaultEnv =  Env 0 64 64
 
 
 type MidiTrack  = Track Double
@@ -46,7 +44,9 @@ env us = snd <$> ask >>= \e -> mapM_ (liftIO . modifyMVar_ e . lensify) us
     lensify (f :~ g) = return . over f g
 
 pause :: Rational -> MM ()
-pause t = see bpm >>= \b -> modify (+ fromRational (t*60/b))
+pause t =  modify (+ fromRational t)
+
+
 
 class Midifiable a where
   send :: a -> MM ()
@@ -56,7 +56,6 @@ instance Midifiable a => Midifiable [a] where
 
 instance Midifiable Message where
   send x = get >>= \t -> tell [(t,x)]
-
 
 -- instance Midifiable (Music Pitch) where
 --   send (Prim (Note dur pitch))   = see vel >>= send . NoteOn' (absPitch pitch) >>

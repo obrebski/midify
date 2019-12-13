@@ -1,119 +1,77 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
--- {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Sound.MIDI.Midify ( module Sound.MIDI.Midify
-                         , module Sound.MIDI.Midify.PMWritable
-                         ) where
+module Sound.MIDI.Midify where
 
 import Codec.Midi
 import Control.Lens
-
-import Sound.MIDI.Midify.PMWritable ( PMWritable, Timestamp, write )
-import GHC.Exts                     ( sortWith )
+-- import Sound.MIDI.Midify.PMWritable ( PMWritable, Timestamp, write )
+-- import GHC.Exts                     ( sortWith )
 import Control.Monad.Trans.RWS      ( RWST, execRWST, get, put, modify, tell, ask )
 import Data.List                    ( intersperse )
+import Sound.MIDI.Midify.Types
 
---import Control.Monad.IO.Class       (MonadIO)
-
--- |The type for bits-per-minute value.
-type BPM         = Rational
-
--- |Time expressed in quarternotes.
-type BeatTime    = Rational
-
--- |Time expressed in seconds.
-type RealTime    = Float
-
-class MidiTime a where
-  toTimestamp :: BPM -> a -> Timestamp
-
-instance MidiTime RealTime where
-  toTimestamp = const . round . (* 1000)
-
-instance MidiTime BeatTime where
-  toTimestamp bpm = round . fromRational . (* (60000/bpm))
-
-data Env = Env { _ch::Channel,     -- MIDI channel
-                 _bpm::BPM,        -- beats per minute
-                 _vel::Velocity,   -- default press velocity
-                 _vel'::Velocity,  -- default release velocity
-                 _tra::Int,        -- transposition
-                 _prog::Int        -- program
+data Env = Env { _ch   :: Channel     -- ^ MIDI channel
+               , _vel  :: Velocity    -- ^ default press velocity
+               , _vel' :: Velocity    -- ^ default release velocity
                } deriving Show
 
 makeLenses ''Env
 
 defaultEnv :: Env
-defaultEnv = Env { _ch=0, _bpm=60, _vel=64, _vel'=64, _tra=0, _prog=0}
+defaultEnv = Env 0 64 64
 
-instance PMWritable (Track RealTime) where
-  write s = write s . map (over _1 (toTimestamp 0))
+type T = RWST Bool MidiTrack (TrackTime,Env) IO
 
-instance PMWritable (Track BeatTime) where
-  write s = write s . map (over _1 (toTimestamp 0))
-
-type T t = RWST Bool (Track t) (t,Env) IO
-
-instance PMWritable (T RealTime ()) where
-  write s t = snd <$> execRWST t True (0,defaultEnv) >>= write s 
-
-midifyIn :: (RealTime,Env) -> T RealTime () -> IO ((RealTime,Env),Track RealTime)
+midifyIn :: (TrackTime,Env) -> T () -> IO ((TrackTime,Env),MidiTrack)
 midifyIn (t,env) c = execRWST c True (t,env)
 
--- midify :: T RealTime () -> IO (Track RealTime)
--- midify t = snd <$>  midifyIn (0,defaultEnv) t
+midify :: T () -> IO MidiTrack
+midify t = snd <$>  midifyIn (0,defaultEnv) t
 
-see :: Getting a Env a -> T RealTime a
+see :: Getting a Env a -> T a
 see f = view (_2.f) <$> get
 
 data Update f a = f := a | f :~ (a->a)
 
-env :: Num a => [Update (ASetter Env Env a a) a] -> T RealTime ()
+env :: Num a => [Update (ASetter Env Env a a) a] -> T ()
 env = sequence_ . map (modify . toLens)
   where
     toLens (f := v) = (set (_2.f) v)
     toLens (f :~ g) = (over (_2.f) g)
 
-gettime :: T RealTime RealTime
+gettime :: T TrackTime
 gettime = view _1 <$> get
 
-settime :: RealTime -> T RealTime ()
+settime :: TrackTime -> T ()
 settime = modify . set _1
 
-loc :: T RealTime () -> T RealTime ()
+loc :: T () -> T ()
 loc m = get >>= \(_,e) -> m >> gettime >>= \t -> put (t,e)
 
-fork :: T RealTime () -> T RealTime ()
-fork m = get >>= \(t,e) -> m >> put (t,e)
+fork :: T () -> T ()
+fork m = get >>= \s -> m >> put s
 
-pause :: Rational -> T RealTime ()
-pause t = see bpm >>= \b -> modify $ over _1 (+ fromRational (t * 60 / b))
+pause :: Rational -> T ()
+pause t = modify $ over _1 (+ fromRational t)
 
-every :: Rational -> [T RealTime ()] -> T RealTime ()
+every :: Rational -> [T ()] -> T ()
 every t = sequence_ . intersperse (pause t)
 
-within :: Rational -> [T RealTime ()] -> T RealTime ()
+within :: Rational -> [T ()] -> T ()
 within t xs = every t' xs where t' = (t / fromIntegral (length xs - 1))
 
-rep :: Int -> T RealTime () -> T RealTime ()
+rep :: Int -> T () -> T ()
 rep n = sequence_ . replicate n
 
 class Midifiable a where
-  send :: a -> T RealTime ()
+  send :: a -> T ()
 
 instance Midifiable a => Midifiable [a] where
-  send = sequence_ . map send
-
--- instance Midifiable (Env -> Env) where
---   send = modify . over _2
+  send = mapM_ send
 
 instance Midifiable Message where
-  send x = gettime >>= \t -> see tra >>= \tr -> tell [(t,transposeIfNote tr x)]
-    where
-      transposeIfNote tr (NoteOn  c p v) = NoteOn  c (p+tr) v
-      transposeIfNote tr (NoteOff c p v) = NoteOff c (p+tr) v
-      transposeIfNote _  other           = other
+  send x = gettime >>= \t -> tell [(t,x)]
 
 data Message' = NoteOff'         !Key !Velocity
               | NoteOn'          !Key !Velocity
@@ -125,18 +83,21 @@ data Message' = NoteOff'         !Key !Velocity
               deriving (Show,Eq)
 
 instance Midifiable Message' where
-  send (NoteOff' a b) = see ch >>= \c -> send (NoteOff c a b)
-  send (NoteOn' a b) = see ch >>= \c -> send (NoteOn c a b)
-  send (KeyPressure' a b) = see ch >>= \c -> send (KeyPressure c a b)
+  send (NoteOff' a b)       = see ch >>= \c -> send (NoteOff c a b)
+  send (NoteOn' a b)        = see ch >>= \c -> send (NoteOn c a b)
+  send (KeyPressure' a b)   = see ch >>= \c -> send (KeyPressure c a b)
   send (ControlChange' a b) = see ch >>= \c -> send (ControlChange c a b)
-  send (ProgramChange' a) = see ch >>= \c -> send (ProgramChange c a)
+  send (ProgramChange' a)   = see ch >>= \c -> send (ProgramChange c a)
   send (ChannelPressure' a) = see ch >>= \c -> send (ChannelPressure c a)
-  send (PitchWheel' a) = see ch >>= \c -> send (PitchWheel c a)
+  send (PitchWheel' a)      = see ch >>= \c -> send (PitchWheel c a)
 
-data Message'' = NoteOff'' !Key !Velocity
-               | NoteOn''  !Key !Velocity
+data Message'' = NoteOff'' !Key
+               | NoteOn''  !Key
                deriving (Show,Eq)
 
+instance Midifiable Message'' where
+  send (NoteOff'' k) = see vel' >>= \v -> send (NoteOff' k v)
+  send (NoteOn''  k) = see vel  >>= \v -> send (NoteOn'  k v)
 
 data CCMessage = BankSelect !Channel !Int
 --                     | PitchBend' Int
