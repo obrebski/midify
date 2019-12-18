@@ -13,10 +13,20 @@
     
     ```console
     $ git clone https://github.com/obrebski/midify.git
+    ```
+2. Go to `midify` directory
+    
+    ```console
     $ cd midify
-    $ stack setup
     ```
 
+3. Run `ghci`
+
+    ```console
+    $ stack setup
+    ```
+    This might take some time...
+ 
 # Tutorial
 
 ## Checking for MIDI devices available
