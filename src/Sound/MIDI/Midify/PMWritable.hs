@@ -8,7 +8,7 @@ module Sound.MIDI.Midify.PMWritable ( initialize
                                     ) where
 
 import Codec.Midi     ( Message(..), Track, isChannelMessage )
-import Sound.PortMidi ( PMEvent(PMEvent), PMMsg(PMMsg), PMStream, PMError(..)
+import Sound.PortMidi ( PMEvent(PMEvent), PMMsg(PMMsg), PMStream, PMError(..), PMSuccess(..)
                       , DeviceID
                       , initialize, terminate, openInput, openOutput, close
                       , writeEvents, writeShort, writeSysEx
@@ -21,31 +21,31 @@ import Data.Bits      ( (.|.), (.&.), shiftR )
 import Data.ByteString.Lazy ( unpack )
 
 
-writeMsg :: PMStream -> (Timestamp,Message) -> IO PMError
+writeMsg :: PMStream -> (Timestamp,Message) -> IO (Either PMError PMSuccess)
 writeMsg str (t,msg) | isChannelMessage msg = writeShort str $ PMEvent (encodeMsg $ toPMMsg msg) t
 writeMsg str (t,Sysex n bytes)              = writeSysEx str t $ map (toEnum . fromEnum) $ unpack bytes
-writeMsg _   _                              = return BadData
+writeMsg _   _                              = return $ Left BadData
 
 
 type Timestamp  = CULong
 
 class PMWritable a where
-  write :: PMStream -> a -> IO PMError
+  write :: PMStream -> a -> IO (Either PMError PMSuccess)
 
 instance PMWritable (Timestamp, Message) where
   write str (t,msg) | isChannelMessage msg = time >>= \now ->
                                                     writeShort str $ PMEvent (encodeMsg $ toPMMsg msg) (now + t)
   write str (t,Sysex n bytes)              = time >>= \now -> writeSysEx str (now + t) $ map (toEnum . fromEnum) $ unpack bytes
-  write _   _                              = return BadData
+  write _   _                              = return $ Left BadData
 
 instance PMWritable Message where
   write str msg = write str (0::Timestamp,msg)
 
 instance PMWritable (Track Timestamp) where
-  write _ [] = return NoError
+  write _ [] = return $ Right GotData
   write str (event:track) = write str event >>= \case
-                                                   NoError -> write str track
-                                                   error   -> return error
+                                                   Right _      -> write str track
+                                                   Left error   -> return $ Left error
 
 toPMMsg :: Message -> PMMsg
 toPMMsg = \case
@@ -61,8 +61,8 @@ toPMMsg = \case
 
 openMidiOutput :: DeviceID -> IO PMStream
 openMidiOutput dev = initialize >> openOutput dev 10 >>= \case
-                                                           Left stream -> return stream
-                                                           Right err   -> error (show err)
+                                                           Right stream -> return stream
+                                                           Left err   -> error (show err)
 
 start :: Int -> IO PMStream
 start n = initialize >> openMidiOutput n

@@ -1,7 +1,0 @@
-* Midify: całe midi w BPMTime, aż do write
-
-* bufor midi
-
-* synchronizacja kilku laptopów, zewnętrzne taktowanie, start, stop
-
-* panorama

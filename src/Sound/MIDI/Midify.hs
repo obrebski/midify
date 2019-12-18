@@ -5,7 +5,7 @@ module Sound.MIDI.Midify where
 
 import Codec.Midi
 import Control.Lens
--- import Sound.MIDI.Midify.PMWritable ( PMWritable, Timestamp, write )
+import Sound.MIDI.Midify.PMWritable ( PMWritable, write, Timestamp )
 -- import GHC.Exts                     ( sortWith )
 import Control.Monad.Trans.RWS      ( RWST, execRWST, get, put, modify, tell, ask )
 import Data.List                    ( intersperse )
@@ -28,6 +28,12 @@ midifyIn (t,env) c = execRWST c True (t,env)
 
 midify :: T () -> IO MidiTrack
 midify t = snd <$>  midifyIn (0,defaultEnv) t
+
+instance PMWritable (T ()) where
+  write s tr = midify tr >>= mapTime >>= write s
+
+mapTime :: MidiTrack -> IO (Track Timestamp)
+mapTime t = return $ map (over _1 (round . (* 1000))) t
 
 see :: Getting a Env a -> T a
 see f = view (_2.f) <$> get

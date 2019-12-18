@@ -4,7 +4,7 @@
 
 module Sound.MIDI.Midify.Player where
 
-import Sound.PortMidi               (PMError,time)
+import Sound.PortMidi               (PMSuccess, PMError, time)
 import Codec.Midi                   (Message)
 import Control.Monad                (when,forever)
 import Control.Monad.Trans.RWS      (RWST, runRWST, get, put, modify, ask)
@@ -13,7 +13,7 @@ import Control.Monad.IO.Class       (liftIO)
 import Sound.MIDI.Midify.PMWritable -- (Timestamp)
 import Sound.MIDI.Midify.Types
 
-type MidiWriter = (PCTime, Message) -> IO PMError
+type MidiWriter = (PCTime, Message) -> IO (Either PMError PMSuccess)
 
 data Ctrl = Ctrl { tempo :: TrackTime -- ^ the length of quarter note in miliseconds
                  , delta :: PCTime    -- ^
@@ -38,8 +38,6 @@ ctrl f = control <$> ask >>= liftIO . readMVar >>= return . f
 
 playTime :: TrackTime -> Player PCTime
 playTime t = do (rt,tt) <- get
-                -- if (t==0)
-                --   then reset >> 
                 to <- ctrl tempo
                 return $ rt + round (to*(t-tt))
 
