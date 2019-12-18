@@ -23,7 +23,7 @@
 3. Run `ghci`
 
     ```console
-    $ stack setup
+    $ stack ghci
     ```
     This might take some time...
  
