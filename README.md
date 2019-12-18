@@ -1,8 +1,6 @@
 # midify
 
-- converting X to MIDI
-  where
-    X includes Euterpea
+- converting X to MIDI where X includes Euterpea
     
 - writing X to PortMidi
 
@@ -10,13 +8,10 @@
 
 `midify` is a `stack` package. If you do not have `stack` installed, see [this](https://docs.haskellstack.org/en/stable/install_and_upgrade/).
 
-```bash
 
-```
-
-    1. Clone the repository
+1. Clone the repository
     
-    ```bash
+    ```console
     $ git clone https://github.com/obrebski/midify.git
     $ cd midify
     $ stack setup
@@ -28,13 +23,13 @@
 
 Opening MIDI stream sending MIDI data to MIDI device 2.
 
-```Haskell
-ghci> s <- start 2
-```
+    ```Haskell
+    ghci> s <- start 2
+    ```
 
 ## Write MIDI messages to stream `s`
 
-```Haskell
-ghci> write s $ send (NoteOn 0 60 100)
-ghci> write s $ send (NoteOff 0 60 100)
-```
+    ```Haskell
+    ghci> write s $ send (NoteOn 0 60 100)
+    ghci> write s $ send (NoteOff 0 60 100)
+    ```
