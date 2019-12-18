@@ -6,5 +6,13 @@
     
 - writing X to PortMidi
 
-# Synopsis
+# Tutorial
+
+## Open MIDI stream
+
+Opening MIDI stream outputing MIDI data to device 2.
+
+```Haskell
+ghci> s <- start 2
+```
 
