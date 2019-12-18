@@ -19,15 +19,34 @@
 
 # Tutorial
 
-## Open MIDI stream
+## Checking for MIDI devices available
 
-Opening MIDI stream to send MIDI data to MIDI device 2.
+Use `devices` from Euterpea module re-exported by Midify for conveniance:
+
+```Haskell
+ghci> devices
+
+Input devices: 
+  InputDeviceID 1       Midi Through Port-0
+
+Output devices: 
+  OutputDeviceID 0      Midi Through Port-0
+  OutputDeviceID 2      TiMidity port 0
+  OutputDeviceID 3      TiMidity port 1
+  OutputDeviceID 4      TiMidity port 2
+  OutputDeviceID 5      TiMidity port 3
+
+```
+
+## Opening MIDI stream
+
+Opening MIDI stream to send MIDI data to MIDI device 2:
 
 ```Haskell
 ghci> s <- start 2
 ```
 
-## How to write MIDI messages to stream `s`
+## Writing MIDI messages to a stream
 
 Use `send` method to write MIDI data to a stream.
 
@@ -35,21 +54,25 @@ Use `send` method to write MIDI data to a stream.
 ghci> write s $ send (NoteOn 0 60 100)
 ghci> write s $ send (NoteOff 0 60 100)
 ```
-## How to write more than one message at a time
+## Writing more than one message at a time
+
+`send X` is a monadic action so...
 
 ```Haskell
 ghci> write s $ send (NoteOn 0 60 100) >> send (NoteOff 0 60 100)
 ```
 
-The second messages will be sent immediately after the first one. 
+The second message will be sent immediately after the first one. No good.
 
-## How to force time delay
+## Time delay
+
+To introduce time delay, use the action `pause`:
 
 ```Haskell
 ghci> write s $ send (NoteOn 0 60 100) >> pause 1 >> send (NoteOff 0 60 100)
 ```
 
-## How to send Euterpea code
+## Sending Euterpea code
 
 ```Haskell
 ghci> write s $ send (c 4 qn) >> pause 1 >> send (d 4 qn)
