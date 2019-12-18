@@ -2,7 +2,7 @@
 
 - converting X to MIDI where X includes Message (Codec.Midi), Music Pitch (Euterpea)
     
-- writing X to PortMidi
+- writing X to PortMidi (Sound.PortMidi)
 
 # Installation
 
@@ -54,6 +54,8 @@ Use `send` method to write MIDI data to a stream.
 ghci> write s $ send (NoteOn 0 60 100)
 ghci> write s $ send (NoteOff 0 60 100)
 ```
+For other MIDI messages, see `data Message` in Codec.Midi [here](https://hackage.haskell.org/package/HCodecs-0.5.1/docs/Codec-Midi.html#t:Message)
+
 ## Writing more than one message at a time
 
 `send X` is a monadic action so...
