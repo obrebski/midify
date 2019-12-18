@@ -10,17 +10,14 @@
 
 `midify` is a `stack` package. If you do not have `stack` installed, see [this](https://docs.haskellstack.org/en/stable/install_and_upgrade/).
 
-```bash
-
-```
 
     1. Clone the repository
     
-    ```bash
-    $ git clone https://github.com/obrebski/midify.git
-    $ cd midify
-    $ stack setup
-    ```
+```console
+$ git clone https://github.com/obrebski/midify.git
+$ cd midify
+$ stack setup
+```
 
 # Tutorial
 
@@ -28,9 +25,9 @@
 
 Opening MIDI stream sending MIDI data to MIDI device 2.
 
-```Haskell
-ghci> s <- start 2
-```
+  ```Haskell
+  ghci> s <- start 2
+  ```
 
 ## Write MIDI messages to stream `s`
 
