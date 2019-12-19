@@ -66,7 +66,7 @@ Use `send` method to write MIDI data to a stream.
 ghci> write s $ send (NoteOn 0 60 100)
 ghci> write s $ send (NoteOff 0 60 100)
 ```
-For other MIDI messages, see `data Message` in Codec.Midi [here](https://hackage.haskell.org/package/HCodecs-0.5.1/docs/Codec-Midi.html#t:Message)
+For other MIDI messages, see the definition of [Message](https://hackage.haskell.org/package/HCodecs-0.5.1/docs/Codec-Midi.html#t:Message) (Codec.Midi).
 
 ## Writing more than one message at a time
 
