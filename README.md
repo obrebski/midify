@@ -1,6 +1,6 @@
 # midify
 
-- converting X to MIDI where X includes Message (Codec.Midi), Music Pitch (Euterpea)
+- converting X to MIDI where X includes [Message](https://hackage.haskell.org/package/HCodecs-0.5.1/docs/Codec-Midi.html#t:Message) (Codec.Midi), Music Pitch (in http://hackage.haskell.org/package/Euterpea-1.1.1/docs/Euterpea-Music-Note-Music.html)
     
 - writing X to PortMidi (Sound.PortMidi)
 
