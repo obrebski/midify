@@ -86,6 +86,15 @@ To introduce time delay, use the action `pause`:
 ghci> write s $ send (NoteOn 0 60 100) >> pause 1 >> send (NoteOff 0 60 100)
 ```
 
+The time unit is whole note duration. The argument to `pause` is of type Rational, the same as Dur type in Euterpea, so you can use duration constants from Euterpea.
+
+```Haskell
+ghci> write s $ send (NoteOn 0 60 100) >> pause wn >> send (NoteOff 0 60 100)
+ghci> write s $ send (NoteOn 0 60 100) >> pause (4*qn) >> send (NoteOff 0 60 100)
+```
+
+
+
 ## Sending Euterpea code
 
 ```Haskell

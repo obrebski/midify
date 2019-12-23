@@ -42,7 +42,7 @@ instance PMWritable Message where
 instance PMWritable (Track PCClock) where
   write _ [] = return $ Right GotData
   write str (event:track) = write str event >>= \case
-                                                  Right _      -> write stream track
+                                                  Right _      -> write str track
                                                   Left error   -> return $ Left error
 
 
