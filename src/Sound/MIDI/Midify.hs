@@ -5,8 +5,7 @@ module Sound.MIDI.Midify where
 
 import Codec.Midi
 import Control.Lens
-import Sound.MIDI.Midify.PMWritable ( PMWritable, write, Timestamp )
--- import GHC.Exts                     ( sortWith )
+import Sound.MIDI.Midify.PMWritable ( PMWritable, write, PMStream, PMError, PMSuccess )
 import Control.Monad.Trans.RWS      ( RWST, execRWST, get, put, modify, tell, ask )
 import Data.List                    ( intersperse )
 import Sound.MIDI.Midify.Types
@@ -18,8 +17,7 @@ data Env = Env { _ch   :: Channel     -- ^ MIDI channel
 
 makeLenses ''Env
 
-defaultEnv :: Env
-defaultEnv = Env 0 64 64
+defaultEnv = Env 0 64 64 :: Env
 
 type T = RWST Bool MidiTrack (TrackTime,Env) IO
 
@@ -29,11 +27,17 @@ midifyIn (t,env) c = execRWST c True (t,env)
 midify :: T () -> IO MidiTrack
 midify t = snd <$>  midifyIn (0,defaultEnv) t
 
+
+infix 0 <<-
+(<<-) :: Midifiable a => PMStream -> a -> IO (Either PMError PMSuccess)
+s <<- x = midify (send x) >>= mapTime >>= write s
+
+
 instance PMWritable (T ()) where
   write s tr = midify tr >>= mapTime >>= write s
 
-mapTime :: MidiTrack -> IO (Track Timestamp)
-mapTime t = return $ map (over _1 (round . (* 1000))) t
+mapTime :: MidiTrack -> IO (Track PCClock)
+mapTime t = return $ map (over _1 (round . (* 4000))) t
 
 see :: Getting a Env a -> T a
 see f = view (_2.f) <$> get
@@ -53,7 +57,7 @@ settime :: TrackTime -> T ()
 settime = modify . set _1
 
 loc :: T () -> T ()
-loc m = get >>= \(_,e) -> m >> gettime >>= \t -> put (t,e)
+loc m = snd <$> get >>= \e -> m >> gettime >>= \t -> put (t,e)
 
 fork :: T () -> T ()
 fork m = get >>= \s -> m >> put s
@@ -70,14 +74,27 @@ within t xs = every t' xs where t' = (t / fromIntegral (length xs - 1))
 rep :: Int -> T () -> T ()
 rep n = sequence_ . replicate n
 
+tempo :: Int -> T ()
+tempo bpm = gettime >>= \t -> tell [(t,TempoChange (60*1000000 `div` bpm))]
+
+-- unpackBytes $ toLazyByteString $ buildMessage (NoteOff 1 1 10)
+
+infixl 1 +>
+(+>) :: (Midifiable a, Midifiable b) => a -> b -> T ()
+x +> y = send x >> send y
+
+
 class Midifiable a where
   send :: a -> T ()
 
-instance Midifiable a => Midifiable [a] where
-  send = mapM_ send
-
 instance Midifiable Message where
   send x = gettime >>= \t -> tell [(t,x)]
+
+instance Midifiable Event where
+  send = tell . pure
+
+instance Midifiable a => Midifiable [a] where
+  send = mapM_ send
 
 data Message' = NoteOff'         !Key !Velocity
               | NoteOn'          !Key !Velocity

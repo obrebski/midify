@@ -9,9 +9,9 @@ import Euterpea
 
 instance Midifiable (Music Pitch) where
   send (Prim (Note dur pitch))   = see vel >>= send . NoteOn' (absPitch pitch) >>
-                                   pause (dur * 4) >>
+                                   pause dur >>
                                    see vel' >>= send . NoteOff' (absPitch pitch)
-  send (Prim (Rest dur))         = pause (dur * 4)
+  send (Prim (Rest dur))         = pause dur
   send (m1 :+: m2)               = send m1 >> send m2
   send (m1 :=: m2)               = gettime >>= \t -> send m1 >> gettime >>= \t'  ->
                                    settime t      >> send m2 >> gettime >>= \t'' ->

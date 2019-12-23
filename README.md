@@ -1,6 +1,6 @@
 # midify
 
-- converting X to MIDI where X includes [Message](https://hackage.haskell.org/package/HCodecs-0.5.1/docs/Codec-Midi.html#t:Message) (Codec.Midi), [Music Pitch](http://hackage.haskell.org/package/Euterpea-1.1.1/docs/Euterpea-Music-Note-Music.html#t:Music) (Euterpea).
+- converting X to [MIDI](midi.org) where X includes [Message](https://hackage.haskell.org/package/HCodecs-0.5.1/docs/Codec-Midi.html#t:Message) (Codec.Midi), [Music Pitch](http://hackage.haskell.org/package/Euterpea-1.1.1/docs/Euterpea-Music-Note-Music.html#t:Music) (Euterpea).
 
 
     
@@ -27,11 +27,10 @@
     ```console
     $ stack ghci
     ```
-    This might take some time...
- 
+    
 # Tutorial
 
-## Checking for MIDI devices available
+## Checking for [MIDI](midi.org) devices available
 
 Use `devices` from Euterpea module re-exported by Midify for conveniance:
 
@@ -50,23 +49,24 @@ Output devices:
 
 ```
 
-## Opening MIDI stream
+## Opening [MIDI](midi.org) stream
 
-Opening MIDI stream to send MIDI data to MIDI device 2:
+Opening [MIDI](midi.org) stream to send [MIDI](midi.org) data to [MIDI](midi.org) device 2:
 
 ```Haskell
 ghci> s <- start 2
 ```
 
-## Writing MIDI messages to a stream
+## Writing [MIDI](midi.org) messages to a stream
 
-Use `send` method to write MIDI data to a stream.
+Use `send` method to write [MIDI](midi.org) data to a stream.
 
 ```Haskell
 ghci> write s $ send (NoteOn 0 60 100)
 ghci> write s $ send (NoteOff 0 60 100)
 ```
-For other MIDI messages, see the definition of [Message](https://hackage.haskell.org/package/HCodecs-0.5.1/docs/Codec-Midi.html#t:Message) (Codec.Midi).
+
+Other [MIDI](midi.org) [Message](https://hackage.haskell.org/package/HCodecs-0.5.1/docs/Codec-Midi.html#t:Message)s ([Codec.Midi](https://hackage.haskell.org/package/HCodecs-0.5.1/docs/Codec-Midi.html)).
 
 ## Writing more than one message at a time
 

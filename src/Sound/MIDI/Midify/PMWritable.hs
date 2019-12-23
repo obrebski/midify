@@ -3,7 +3,7 @@
 
 module Sound.MIDI.Midify.PMWritable ( initialize
                                     , terminate
-                                    , PMError
+                                    , PMError, PMSuccess, PMStream
                                     , module Sound.MIDI.Midify.PMWritable
                                     ) where
 
@@ -17,35 +17,34 @@ import Sound.PortMidi ( PMEvent(PMEvent), PMMsg(PMMsg), PMStream, PMError(..), P
                       )
 import Foreign.C      ( CULong )
 import Data.Bits      ( (.|.), (.&.), shiftR )
-
 import Data.ByteString.Lazy ( unpack )
+import Sound.MIDI.Midify.Types
 
 
-writeMsg :: PMStream -> (Timestamp,Message) -> IO (Either PMError PMSuccess)
-writeMsg str (t,msg) | isChannelMessage msg = writeShort str $ PMEvent (encodeMsg $ toPMMsg msg) t
-writeMsg str (t,Sysex n bytes)              = writeSysEx str t $ map (toEnum . fromEnum) $ unpack bytes
-writeMsg _   _                              = return $ Left BadData
+write' :: PMStream -> (PCClock,Message) -> IO (Either PMError PMSuccess)
+write' str (t,msg) | isChannelMessage msg = writeShort str $ PMEvent (encodeMsg $ toPMMsg msg) t
+write' str (t,Sysex n bytes)              = writeSysEx str t $ map (toEnum . fromEnum) $ unpack bytes
+write' _   _                              = return $ Left BadData
 
-
-type Timestamp  = CULong
 
 class PMWritable a where
   write :: PMStream -> a -> IO (Either PMError PMSuccess)
 
-instance PMWritable (Timestamp, Message) where
+instance PMWritable (PCClock, Message) where
   write str (t,msg) | isChannelMessage msg = time >>= \now ->
                                                     writeShort str $ PMEvent (encodeMsg $ toPMMsg msg) (now + t)
   write str (t,Sysex n bytes)              = time >>= \now -> writeSysEx str (now + t) $ map (toEnum . fromEnum) $ unpack bytes
   write _   _                              = return $ Left BadData
 
 instance PMWritable Message where
-  write str msg = write str (0::Timestamp,msg)
+  write str msg = write str (0::PCClock,msg)
 
-instance PMWritable (Track Timestamp) where
+instance PMWritable (Track PCClock) where
   write _ [] = return $ Right GotData
   write str (event:track) = write str event >>= \case
-                                                   Right _      -> write str track
-                                                   Left error   -> return $ Left error
+                                                  Right _      -> write stream track
+                                                  Left error   -> return $ Left error
+
 
 toPMMsg :: Message -> PMMsg
 toPMMsg = \case

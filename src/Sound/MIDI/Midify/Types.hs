@@ -4,7 +4,7 @@ import Codec.Midi (Track, Message)
 import Foreign.C  (CULong)
 
 -- |PC clock time.
-type PCTime = CULong
+type PCClock = CULong
 
 -- |Time expressed in beats.
 type TrackTime = Double

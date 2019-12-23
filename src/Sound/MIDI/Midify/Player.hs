@@ -13,10 +13,10 @@ import Control.Monad.IO.Class       (liftIO)
 import Sound.MIDI.Midify.PMWritable -- (Timestamp)
 import Sound.MIDI.Midify.Types
 
-type MidiWriter = (PCTime, Message) -> IO (Either PMError PMSuccess)
+type MidiWriter = (PCClock, Message) -> IO (Either PMError PMSuccess)
 
 data Ctrl = Ctrl { tempo :: TrackTime -- ^ the length of quarter note in miliseconds
-                 , delta :: PCTime    -- ^
+                 , delta :: PCClock    -- ^
                  } deriving Show
 
 data PEnv = PEnv { input   :: Chan Event  -- ^ the channel MIDI events are read from
@@ -24,7 +24,7 @@ data PEnv = PEnv { input   :: Chan Event  -- ^ the channel MIDI events are read 
                  , control :: MVar Ctrl   -- ^ shared control data
                  }
            
-type Player = RWST PEnv [String] (PCTime,TrackTime) IO
+type Player = RWST PEnv [String] (PCClock,TrackTime) IO
 
 runPlayer :: PEnv -> IO ThreadId
 runPlayer = forkIO . runPlayer'
@@ -36,12 +36,12 @@ runPlayer = forkIO . runPlayer'
 ctrl :: (Ctrl -> a) -> Player a
 ctrl f = control <$> ask >>= liftIO . readMVar >>= return . f
 
-playTime :: TrackTime -> Player PCTime
+playTime :: TrackTime -> Player PCClock
 playTime t = do (rt,tt) <- get
                 to <- ctrl tempo
                 return $ rt + round (to*(t-tt))
 
-spendTime :: PCTime -> Player ()
+spendTime :: PCClock -> Player ()
 spendTime t = do d <- ctrl delta
                  when (t>d) $ liftIO $ threadDelay $ 1000 * fromIntegral (t-d `div` 2)
 
@@ -55,13 +55,12 @@ play = do PEnv inp out _ <- ask
           left  <- (pt -) <$> liftIO time
           spendTime left
           put (pt,t)
---          liftIO $ putStrLn $ show (pt,t)
           liftIO $ out (pt,m) >> return ()
 
 test :: IO (ThreadId, MVar Ctrl, Chan Event)
 test = do c <- newMVar (Ctrl 1000 100)
           k <- newChan :: IO (Chan Event)
           s <- start 2
-          p <- runPlayer (PEnv k (writeMsg s) c)
+          p <- runPlayer (PEnv k (write' s) c)
           return (p,c,k)
           
