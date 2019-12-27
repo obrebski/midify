@@ -74,10 +74,8 @@ within t xs = every t' xs where t' = (t / fromIntegral (length xs - 1))
 rep :: Int -> T () -> T ()
 rep n = sequence_ . replicate n
 
-tempo :: Int -> T ()
-tempo bpm = gettime >>= \t -> tell [(t,TempoChange (60*1000000 `div` bpm))]
-
--- unpackBytes $ toLazyByteString $ buildMessage (NoteOff 1 1 10)
+bpm :: RealFrac a => a -> T ()
+bpm b = gettime >>= \t -> tell [(t,TempoChange (round $ 60*1000000/b))]
 
 infixl 1 +>
 (+>) :: (Midifiable a, Midifiable b) => a -> b -> T ()
