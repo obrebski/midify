@@ -19,71 +19,82 @@ makeLenses ''Env
 
 defaultEnv = Env 0 64 64 :: Env
 
-type T = RWST Bool MidiTrack (TrackTime,Env) IO
+type M = RWST Bool MidiTrack (TrackTime,Env) IO
 
-midifyIn :: (TrackTime,Env) -> T () -> IO ((TrackTime,Env),MidiTrack)
+midifyIn :: (TrackTime,Env) -> M () -> IO ((TrackTime,Env),MidiTrack)
 midifyIn (t,env) c = execRWST c True (t,env)
 
-midify :: T () -> IO MidiTrack
+midify :: M () -> IO MidiTrack
 midify t = snd <$>  midifyIn (0,defaultEnv) t
 
 
 infix 0 <<-
 (<<-) :: Midifiable a => PMStream -> a -> IO (Either PMError PMSuccess)
-s <<- x = midify (send x) >>= mapTime >>= write s
+s <<- x = mapTime <$> midify (send x) >>= write s
 
 
-instance PMWritable (T ()) where
-  write s tr = midify tr >>= mapTime >>= write s
+instance PMWritable (M ()) where
+  write s tr = mapTime <$> midify tr >>= write s
 
-mapTime :: MidiTrack -> IO (Track PCClock)
-mapTime t = return $ map (over _1 (round . (* 4000))) t
+mapTime :: MidiTrack -> Track PCClock
+mapTime = mapTimeWith 1000000
 
-see :: Getting a Env a -> T a
+mapTimeWith ::  Tempo -> MidiTrack -> Track PCClock
+mapTimeWith _ []                           = []
+mapTimeWith _     ((_   , TempoChange tempo'):events) =                   mapTimeWith tempo' events
+mapTimeWith tempo ((time, message           ):events) = (time',message) : mapTimeWith tempo events
+  where
+    time' = round ((fromIntegral tempo / 1000) * time * 4)
+
+
+see :: Getting a Env a -> M a
 see f = view (_2.f) <$> get
 
 data Update f a = f := a | f :~ (a->a)
 
-env :: Num a => [Update (ASetter Env Env a a) a] -> T ()
+env :: Num a => [Update (ASetter Env Env a a) a] -> M ()
 env = sequence_ . map (modify . toLens)
   where
     toLens (f := v) = (set (_2.f) v)
     toLens (f :~ g) = (over (_2.f) g)
 
-gettime :: T TrackTime
+gettime :: M TrackTime
 gettime = view _1 <$> get
 
-settime :: TrackTime -> T ()
+settime :: TrackTime -> M ()
 settime = modify . set _1
 
-loc :: T () -> T ()
+loc :: M () -> M ()
 loc m = snd <$> get >>= \e -> m >> gettime >>= \t -> put (t,e)
 
-fork :: T () -> T ()
+fork :: M () -> M ()
 fork m = get >>= \s -> m >> put s
 
-pause :: Rational -> T ()
+pause :: Rational -> M ()
 pause t = modify $ over _1 (+ fromRational t)
 
-every :: Rational -> [T ()] -> T ()
+every :: Rational -> [M ()] -> M ()
 every t = sequence_ . intersperse (pause t)
 
-within :: Rational -> [T ()] -> T ()
+within :: Rational -> [M ()] -> M ()
 within t xs = every t' xs where t' = (t / fromIntegral (length xs - 1))
 
-rep :: Int -> T () -> T ()
+sq :: [M ()] -> M ()
+sq = sequence_
+
+rep :: Int -> M () -> M ()
 rep n = sequence_ . replicate n
 
-bpm :: RealFrac a => a -> T ()
-bpm b = gettime >>= \t -> tell [(t,TempoChange (round $ 60*1000000/b))]
+bpm :: RealFrac a => a -> M ()
+bpm b = send $ TempoChange (round $ 60*1000000/b)
 
 infixl 1 +>
-(+>) :: (Midifiable a, Midifiable b) => a -> b -> T ()
+(+>) :: (Midifiable a, Midifiable b) => a -> b -> M ()
 x +> y = send x >> send y
 
 
 class Midifiable a where
-  send :: a -> T ()
+  send :: a -> M ()
 
 instance Midifiable Message where
   send x = gettime >>= \t -> tell [(t,x)]

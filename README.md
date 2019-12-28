@@ -81,7 +81,7 @@ ghci> write s $ send (NoteOn 0 60 100) >> send (NoteOff 0 60 100)
 ```
 
 The second message will be sent immediately after the first one. In
-order to make the note last, a time delay must be introduced.
+order to make the note last, time delay must be introduced.
 
 ## Time delay
 
@@ -119,11 +119,8 @@ The two lines above generate the same MIDI output.
 
 The default values of channel (`ch`), NoteOn velocity (`vel`) and
 NoteOff velocity (`vel'`) are kept in MIDI environment accessible
-during evaluation of MIDI expressions. The initial values are:
-
-| ch   | 0  |
-| vel  | 64 |
-| vel' | 64 |
+during evaluation of MIDI expressions. The initial values are 0 for
+`ch` and 64 for `vel` and `vel'`.
 
 MIDI channes are numbered from 0 to 15. Velocity values range from 0 to 127.
 

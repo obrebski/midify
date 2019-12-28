@@ -13,4 +13,4 @@ type TrackTime = Double
 type Event = (TrackTime,Message)
 
 -- |Midi track type.
-type MidiTrack = Track TrackTime
+type MidiTrack = Track TrackTime -- == [Event]
