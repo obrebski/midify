@@ -6,7 +6,7 @@ module Sound.MIDI.Midify where
 import Codec.Midi
 import Control.Lens
 import Sound.MIDI.Midify.PMWritable ( PMWritable, write, PMStream, PMError, PMSuccess )
-import Control.Monad.Trans.RWS      ( RWST, execRWST, get, put, modify, tell, ask )
+import Control.Monad.Trans.RWS      ( RWS, execRWS, get, put, modify, tell, ask )
 import Data.List                    ( intersperse )
 import Sound.MIDI.Midify.Types
 
@@ -19,22 +19,22 @@ makeLenses ''Env
 
 defaultEnv = Env 0 64 64 :: Env
 
-type M = RWST Bool MidiTrack (TrackTime,Env) IO
+type M = RWS Bool MidiTrack (TrackTime,Env)
 
-midifyIn :: (TrackTime,Env) -> M () -> IO ((TrackTime,Env),MidiTrack)
-midifyIn (t,env) c = execRWST c True (t,env)
+midifyIn :: (TrackTime,Env) -> M () -> MidiTrack
+midifyIn x c = snd $ execRWS c True x
 
-midify :: M () -> IO MidiTrack
-midify t = snd <$>  midifyIn (0,defaultEnv) t
+midify :: M () -> MidiTrack
+midify = midifyIn (0,defaultEnv)
 
 
 infix 0 <<-
 (<<-) :: Midifiable a => PMStream -> a -> IO (Either PMError PMSuccess)
-s <<- x = mapTime <$> midify (send x) >>= write s
+s <<- x = write s $ mapTime $ midify (send x)
 
 
 instance PMWritable (M ()) where
-  write s tr = mapTime <$> midify tr >>= write s
+  write s tr = write s $ mapTime $ midify tr
 
 mapTime :: MidiTrack -> Track PCClock
 mapTime = mapTimeWith 1000000
