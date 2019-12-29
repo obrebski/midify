@@ -40,17 +40,16 @@ mapTime :: MidiTrack -> Track PCClock
 mapTime = mapTimeWith 1000000
 
 mapTimeWith ::  Tempo -> MidiTrack -> Track PCClock
-mapTimeWith _ []                           = []
+mapTimeWith _     []                                  = []
 mapTimeWith _     ((_   , TempoChange tempo'):events) =                   mapTimeWith tempo' events
 mapTimeWith tempo ((time, message           ):events) = (time',message) : mapTimeWith tempo events
   where
     time' = round ((fromIntegral tempo / 1000) * time * 4)
 
+data Update f a = f := a | f :~ (a->a)
 
 see :: Getting a Env a -> M a
 see f = view (_2.f) <$> get
-
-data Update f a = f := a | f :~ (a->a)
 
 env :: Num a => [Update (ASetter Env Env a a) a] -> M ()
 env = sequence_ . map (modify . toLens)
