@@ -127,8 +127,8 @@ MIDI channes are numbered from 0 to 15. Velocity values range from 0 to 127.
 ### Setting MIDI environment parameters
 
 ```Haskell
-ghci> write s $ env[ch=3] >> env[vel=100] >> send (c 4 qn)
-ghci> write s $ env[ch=3,vel=100] >> send (c 4 qn)
+ghci> write s $ env[ch:=3] >> env[vel:=100] >> send (c 4 qn)
+ghci> write s $ env[ch:=3,vel:=100] >> send (c 4 qn)
 ```
 
 The note will be sent to channel 3 with NoteOn velocity 100 and NoteOff velocity 64.
