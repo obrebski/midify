@@ -11,7 +11,7 @@ import Sound.PortMidi               (PMSuccess, PMError, time)
 import Sound.MIDI.Midify.PMWritable -- (Timestamp)
 import Sound.MIDI.Midify.Types
 import Codec.Midi                   -- (Message)
-import Control.Monad                (when,forever)
+import Control.Monad                (when,forever,liftM)
 import Control.Monad.Trans.RWS      (RWST, runRWST, get, put, modify, ask)
 import Control.Concurrent           -- (ThreadId, MVar, readMVar, Chan, readChan, forkIO, threadDelay)
 import Control.Monad.IO.Class       (MonadIO,liftIO)
@@ -22,7 +22,7 @@ type MidiWriter = (PCClock, Message) -> IO (Either PMError PMSuccess)
 data Status = Run | Pause
   deriving Show
 
-data Ctrl = Ctrl { _qnLength :: TrackTime  -- ^ the length of quarter note in microseconds
+data Ctrl = Ctrl { _qlen     :: TrackTime  -- ^ the length of quarter note in microseconds
                  , _delta    :: PCClock    -- ^
                  , _status   :: Status
                  } deriving Show
@@ -34,8 +34,8 @@ data PEnv = PEnv { input   :: Chan Event  -- ^ the channel MIDI events are read 
                  , control :: MVar Ctrl   -- ^ shared control data
                  }
 
-data State = State { _clockTime :: PCClock
-                   , _trackTime :: TrackTime
+data State = State { _ctime :: PCClock
+                   , _ttime :: TrackTime
                    , _closet :: Maybe Event
                    }
             
@@ -54,21 +54,19 @@ now :: Player PCClock
 now = liftIO time
 
 ctrlGet :: (Ctrl -> a) -> Player a
-ctrlGet f = control <$> ask >>= liftIO . readMVar >>= return . f
+ctrlGet f = ask <&> control >>= liftIO . readMVar >>= return . f
 
 ctrlMod :: (Ctrl -> Ctrl) -> Player ()
-ctrlMod f = control <$> ask >>= liftIO . flip modifyMVar_ (return . f)
-
+ctrlMod f = ask <&> control >>= liftIO . flip modifyMVar_ (return . f)
 
 cc :: MonadIO m => (MVar Ctrl) -> (Ctrl -> Ctrl) -> m ()
 cc v f = liftIO $ modifyMVar_ v (return . f)
 
-
 playTime :: TrackTime -> Player PCClock
 playTime 0 = now
 playTime t = do s <- get
-                qnLength <- ctrlGet _qnLength
-                return $ s^.clockTime + round (qnLength*4*(t - s^.trackTime)/1000)
+                q <- ctrlGet $ view qlen
+                return $ s^.ctime + round (q*4*(t - s^.ttime)/1000)
 
 spendTime :: PCClock -> Player ()
 spendTime t = do d <- ctrlGet _delta
@@ -78,28 +76,29 @@ spendTime t = do d <- ctrlGet _delta
 -- reset = get >>= (,0) <$> now >>= put
 
 next :: Player Event
-next =  _closet <$> get >>= \case
-                             Nothing -> ask >>= liftIO . readChan . input
-                             Just e  -> modify (closet .~ Nothing)  >> return e
+next =  get <&> view closet >>= \case
+                                  Nothing -> ask >>= liftIO . readChan . input
+                                  Just e  -> modify (closet .~ Nothing)  >> return e
 
 stash :: Event -> Player ()
 stash e = modify $ closet .~ Just e
 
-processMeta (t,TempoChange c) = ctrlMod (over qnLength (fromIntegral . const c))
-processMeta _                 = return ()
+writeMeta :: Event -> Player ()
+writeMeta (t,TempoChange c) = ctrlMod (over qlen (fromIntegral . const c))
+writeMeta _                 = return ()
 
 play :: Player ()
 play = do e@(t, m) <- next
           ct       <- playTime t
           if isMetaMessage m
-            then do processMeta e
-                    modify $ (clockTime .~ ct) . (trackTime .~ t)
+            then do writeMeta e
+                    modify $ (ctime .~ ct) . (ttime .~ t)
             else do timeLeft  <- (ct -) <$> now
-                    d <- ctrlGet _delta
-                    if (timeLeft < 2*d) --spendTime timeLeft
-                      then do writer <- output <$> ask
+                    d <- ctrlGet $ view delta
+                    if timeLeft < 2 * d
+                      then do writer <- ask <&> output
                               liftIO $ writer (ct,m) >> return ()
-                              modify $ (clockTime .~ ct) . (trackTime .~ t)
+                              modify $ (ctime .~ ct) . (ttime .~ t)
                       else do stash e
                               liftIO $ threadDelay (fromIntegral d)
           return ()
