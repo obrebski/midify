@@ -19,6 +19,9 @@ import Control.Lens
 
 type MidiWriter = (PCClock, Message) -> IO (Either PMError PMSuccess)
 
+
+-- data Control = Start | Stop | BPM TrackTime | Trans Int | 
+
 data Status = Run | Pause
   deriving Show
 
@@ -41,67 +44,22 @@ data State = State { _ctime :: PCClock
             
 makeLenses ''State
 
-type Player = RWST PEnv [String] State IO
+type P = RWST PEnv [String] State IO
 
-runPlayer :: PEnv -> IO ThreadId
-runPlayer = forkIO . runPlayer'
-  where
-    runPlayer' e = do now <- time
-                      (a,s,t) <- runRWST (forever play) e (State now 0 Nothing)
-                      return ()
 
-now :: Player PCClock
-now = liftIO time
+data Player = Player { _thread    :: ThreadId
+                     , _controler :: MVar Ctrl
+                     , _in        :: Chan Event
+                     }
 
-ctrlGet :: (Ctrl -> a) -> Player a
-ctrlGet f = ask <&> control >>= liftIO . readMVar >>= return . f
+qlenDefault = 1000000
 
-ctrlMod :: (Ctrl -> Ctrl) -> Player ()
-ctrlMod f = ask <&> control >>= liftIO . flip modifyMVar_ (return . f)
-
-cc :: MonadIO m => (MVar Ctrl) -> (Ctrl -> Ctrl) -> m ()
-cc v f = liftIO $ modifyMVar_ v (return . f)
-
-playTime :: TrackTime -> Player PCClock
-playTime 0 = now
-playTime t = do s <- get
-                q <- ctrlGet $ view qlen
-                return $ s^.ctime + round (q*4*(t - s^.ttime)/1000)
-
-spendTime :: PCClock -> Player ()
-spendTime t = do d <- ctrlGet _delta
-                 when (t>2*d) $ liftIO $ threadDelay $ 1000 * fromIntegral (t - d)
-
--- reset :: Player ()
--- reset = get >>= (,0) <$> now >>= put
-
-next :: Player Event
-next =  get <&> view closet >>= \case
-                                  Nothing -> ask >>= liftIO . readChan . input
-                                  Just e  -> modify (closet .~ Nothing)  >> return e
-
-stash :: Event -> Player ()
-stash e = modify $ closet .~ Just e
-
-writeMeta :: Event -> Player ()
-writeMeta (t,TempoChange c) = ctrlMod (over qlen (fromIntegral . const c))
-writeMeta _                 = return ()
-
-play :: Player ()
-play = do e@(t, m) <- next
-          ct       <- playTime t
-          if isMetaMessage m
-            then do writeMeta e
-                    modify $ (ctime .~ ct) . (ttime .~ t)
-            else do timeLeft  <- (ct -) <$> now
-                    d <- ctrlGet $ view delta
-                    if timeLeft < 2 * d
-                      then do writer <- ask <&> output
-                              liftIO $ writer (ct,m) >> return ()
-                              modify $ (ctime .~ ct) . (ttime .~ t)
-                      else do stash e
-                              liftIO $ threadDelay (fromIntegral d)
-          return ()
+player :: Int -> Int -> IO Player
+player device delta = do c <- newMVar $ Ctrl qlenDefault (fromIntegral delta) Run
+                         k <- newChan :: IO (Chan Event)
+                         s <- start device
+                         p <- runPlayer (PEnv k (write' s) c)
+                         return $ Player p c k
 
 test :: IO (ThreadId, MVar Ctrl, Chan Event)
 test = do c <- newMVar (Ctrl 1000000 100 Run)
@@ -110,3 +68,74 @@ test = do c <- newMVar (Ctrl 1000000 100 Run)
           p <- runPlayer (PEnv k (write' s) c)
           return (p,c,k)
           
+runPlayer :: PEnv -> IO ThreadId
+runPlayer = forkIO . runPlayer'
+  where
+    runPlayer' e = do now <- time
+                      (a,s,t) <- runRWST (forever play) e (State now 0 Nothing)
+                      return ()
+
+now :: P PCClock
+now = liftIO time
+
+ctrlGet :: (Ctrl -> a) -> P a
+ctrlGet f = ask <&> control >>= liftIO . readMVar >>= return . f
+
+ctrlMod :: (Ctrl -> Ctrl) -> P ()
+ctrlMod f = ask <&> control >>= liftIO . flip modifyMVar_ (return . f)
+
+cc :: MonadIO m => (MVar Ctrl) -> (Ctrl -> Ctrl) -> m ()
+cc v f = liftIO $ modifyMVar_ v (return . f)
+
+playTime :: TrackTime -> P PCClock
+playTime 0 = now
+playTime t = do s <- get
+                q <- ctrlGet $ view qlen
+                return $ s^.ctime + round (q * 4 * (t - s^.ttime)/1000)
+
+updateTime :: P ()
+updateTime = do t       <- now
+                q       <- ctrlGet $ view qlen
+                (ct,tt) <- get <&> (,) <$> view ctime <*> view ttime
+                modify $ (ctime .~ t) -- . (ttime %~ (+ (fromIntegral (ct - t) / q)))
+                
+
+-- spendTime :: PCClock -> P ()
+-- spendTime t = do d <- ctrlGet _delta
+--                  when (t>2*d) $ liftIO $ threadDelay $ 1000 * fromIntegral (t - d)
+
+-- reset :: P ()
+-- reset = get >>= (,0) <$> now >>= put
+
+next :: P Event
+next =  get <&> view closet >>= \case
+                                  Nothing -> ask >>= liftIO . readChan . input
+                                  Just e  -> modify (closet .~ Nothing)  >> return e
+
+stash :: Event -> P ()
+stash e = modify $ closet .~ Just e
+
+writeMeta :: Event -> P ()
+writeMeta (t,TempoChange c) = ctrlMod (over qlen (fromIntegral . const c))
+writeMeta _                 = return ()
+
+snooze :: P ()
+snooze = ctrlGet (view delta) >>= liftIO . threadDelay . fromIntegral
+
+play :: P ()
+play = ctrlGet (view status) >>= ( \case
+                                     Pause -> updateTime >> snooze
+                                     Run   -> do e@(t, m) <- next
+                                                 ct       <- playTime t
+                                                 if isMetaMessage m
+                                                   then do writeMeta e
+                                                           modify $ (ctime .~ ct) . (ttime .~ t)
+                                                   else do w  <- (ct -) <$> now
+                                                           d <- ctrlGet (view delta)
+                                                           if w < 2 * d
+                                                             then do writer <- ask <&> output
+                                                                     liftIO $ writer (ct,m) >> return ()
+                                                                     modify $ (ctime .~ ct) . (ttime .~ t)
+                                                             else do stash e
+                                                                     snooze )
+       >> return ()
