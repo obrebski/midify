@@ -112,9 +112,9 @@ The tempo may be set in two ways, which are equivalent:
     ```
    - by setting the `bpm` parameter of MIDI environment:
 
-    ```Haskell
-    ghci> write s $ env[bpm:=120]
-    ```
+     ```Haskell
+     ghci> write s $ env[bpm:=120]
+     ```
 
 ## Sending Euterpea code
 
