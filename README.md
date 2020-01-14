@@ -100,6 +100,22 @@ ghci> write s $ send (NoteOn 0 60 100) >> pause wn >> send (NoteOff 0 60 100)
 ghci> write s $ send (NoteOn 0 60 100) >> pause (4*qn) >> send (NoteOff 0 60 100)
 ```
 
+## Tempo
+
+The tempo may be set in two ways, which are equivalent:
+
+  - by sending the TempoChange MIDI message. The argument is quarter
+    note duration expressed in microseconds (`1000000` for 60 BPM, `500000` for 120 BPM, etc.).
+
+    ```Haskell
+    ghci> write s $ send (TempoChange 500000)
+    ```
+   - by setting the `bpm` parameter of MIDI environment:
+
+    ```Haskell
+    ghci> write s $ env[bpm:=120]
+    ```
+
 ## Sending Euterpea code
 
 `send` is an overloded function accepting instances of the
